@@ -18,6 +18,7 @@ def scan_dependencies():
     
     if error:
         print(f"Error during scanning: {error}")
+        return None
     else:
         print("Scan complete.")
         return output
@@ -27,9 +28,10 @@ def parse_vulnerabilities(scan_output):
     Parse the scan output to find Log4j vulnerabilities.
     """
     vulnerabilities = []
-    for line in scan_output.split('\n'):
-        if 'log4j' in line.lower():
-            vulnerabilities.append(line)
+    if scan_output:
+        for line in scan_output.split('\n'):
+            if 'log4j' in line.lower():
+                vulnerabilities.append(line)
     return vulnerabilities
 
 def update_vulnerable_packages(vulnerabilities):
@@ -63,6 +65,10 @@ def export_results_to_csv(results, filename):
 
 def main():
     scan_output = scan_dependencies()
+    if scan_output is None:
+        print("Failed to scan dependencies. Ensure pip-audit is installed and accessible.")
+        return
+    
     vulnerabilities = parse_vulnerabilities(scan_output)
     
     results = [{'vulnerability': v} for v in vulnerabilities]
