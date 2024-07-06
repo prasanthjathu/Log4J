@@ -1,80 +1,80 @@
-
-import paramiko
+import subprocess
 import re
-import os
 import pandas as pd
 
-def read_computer_list(filename):
-    with open(filename, 'r') as file:
-        computers = [line.strip() for line in file]
-    return computers
+def run_command(command):
+    """
+    Run a system command and return the output.
+    """
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return result.stdout.decode('utf-8'), result.stderr.decode('utf-8')
 
-def run_command_on_remote(hostname, username, password, command):
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(hostname, username=username, password=password)
-    stdin, stdout, stderr = ssh.exec_command(command)
-    return stdout.read().decode('utf-8'), stderr.read().decode('utf-8')
-
-def scan_dependencies_on_remote(hostname, username, password):
-    print(f"Scanning dependencies on {hostname} for vulnerabilities...")
-    output, error = run_command_on_remote(hostname, username, password, 'pip-audit')
+def scan_dependencies():
+    """
+    Scan dependencies for Log4j vulnerabilities using pip-audit.
+    """
+    print("Scanning dependencies for vulnerabilities...")
+    output, error = run_command('pip-audit')
     
     if error:
-        print(f"Error during scanning on {hostname}: {error}")
+        print(f"Error during scanning: {error}")
     else:
-        print(f"Scan complete on {hostname}.")
+        print("Scan complete.")
         return output
 
 def parse_vulnerabilities(scan_output):
+    """
+    Parse the scan output to find Log4j vulnerabilities.
+    """
     vulnerabilities = []
     for line in scan_output.split('\n'):
         if 'log4j' in line.lower():
             vulnerabilities.append(line)
     return vulnerabilities
 
-def update_vulnerable_packages_on_remote(hostname, username, password, vulnerabilities):
+def update_vulnerable_packages(vulnerabilities):
+    """
+    Update vulnerable packages to fixed versions.
+    """
     for vulnerability in vulnerabilities:
         package_info = re.findall(r'(\S+==\S+)', vulnerability)
         if package_info:
             package = package_info[0]
             package_name = package.split('==')[0]
-            print(f"Updating {package_name} on {hostname}...")
-            run_command_on_remote(hostname, username, password, f'pip install --upgrade {package_name}')
-            print(f"{package_name} updated on {hostname}.")
+            print(f"Updating {package_name}...")
+            run_command(f'pip install --upgrade {package_name}')
+            print(f"{package_name} updated.")
 
-def update_requirements_on_remote(hostname, username, password):
-    print(f"Updating requirements.txt on {hostname}...")
-    run_command_on_remote(hostname, username, password, 'pip freeze > requirements.txt')
-    print(f"requirements.txt updated on {hostname}.")
+def update_requirements():
+    """
+    Update the requirements.txt file with the latest package versions.
+    """
+    print("Updating requirements.txt...")
+    run_command('pip freeze > requirements.txt')
+    print("requirements.txt updated.")
 
 def export_results_to_csv(results, filename):
+    """
+    Export the results to a CSV file.
+    """
     df = pd.DataFrame(results)
     df.to_csv(filename, index=False)
     print(f"Results exported to {filename}")
 
 def main():
-    computer_list = read_computer_list('computer_list.txt')
-    username = input("Enter SSH username: ")
-    password = input("Enter SSH password: ")
+    scan_output = scan_dependencies()
+    vulnerabilities = parse_vulnerabilities(scan_output)
     
-    results = []
+    results = [{'vulnerability': v} for v in vulnerabilities]
     
-    for hostname in computer_list:
-        scan_output = scan_dependencies_on_remote(hostname, username, password)
-        vulnerabilities = parse_vulnerabilities(scan_output)
-        
-        result = {'hostname': hostname, 'vulnerabilities': vulnerabilities}
-        results.append(result)
-        
-        if vulnerabilities:
-            print(f"Found the following Log4j vulnerabilities on {hostname}:")
-            for vulnerability in vulnerabilities:
-                print(vulnerability)
-            update_vulnerable_packages_on_remote(hostname, username, password, vulnerabilities)
-            update_requirements_on_remote(hostname, username, password)
-        else:
-            print(f"No Log4j vulnerabilities found on {hostname}.")
+    if vulnerabilities:
+        print("Found the following Log4j vulnerabilities:")
+        for vulnerability in vulnerabilities:
+            print(vulnerability)
+        update_vulnerable_packages(vulnerabilities)
+        update_requirements()
+    else:
+        print("No Log4j vulnerabilities found.")
     
     export_results_to_csv(results, 'scan_results.csv')
 
