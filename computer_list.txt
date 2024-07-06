@@ -1,0 +1,3 @@
+computer1.example.com
+computer2.example.com
+computer3.example.com
